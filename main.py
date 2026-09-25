@@ -1,42 +1,30 @@
-import yfinance as yf
-import requests
-import os
-import time
+import ccxt, requests, os, time
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-# 20 KOIN LU
-COINS = [
-    "TAO-USD", "CAKE-USD", "ETHFI-USD", "LINK-USD", "JUP-USD",
-    "NEAR-USD", "LDO-USD", "SUI-USD", "INJ-USD", "AVAX-USD",
-    "HYPE-USD", "ZEC-USD", "PENDLE-USD", "ENA-USD", "ADA-USD",
-    "ORDI-USD", "WLD-USD", "HBAR-USD", "TRUMP-USD", "UNI-USD"
-]
+COINS = ["TAO/USDT","CAKE/USDT","ETHFI/USDT","LINK/USDT","JUP/USDT","NEAR/USDT","LDO/USDT","SUI/USDT","INJ/USDT","AVAX/USDT","HYPE/USDT","ZEC/USDT","PENDLE/USDT","ENA/USDT","ADA/USDT","ORDI/USDT","WLD/USDT","HBAR/USDT","TRUMP/USDT","UNI/USDT"]
+
+exchange = ccxt.binance()
 
 def send_tele(msg):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    requests.post(url, json={"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"})
+    requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": CHAT_ID, "text": msg, "parse_mode":"Markdown"})
 
-def get_fvg(df):
-    zones = []
-    for i in range(2, len(df)):
-        # FVG BULLISH: Low candle sekarang > High 2 candle lalu
-        if df['Low'].iloc[i] > df['High'].iloc[i-2]:
-            zones.append({'type': 'BULL', 'top': float(df['Low'].iloc[i]), 'bot': float(df['High'].iloc[i-2])})
-        # FVG BEARISH: High candle sekarang < Low 2 candle lalu
-        if df['High'].iloc[i] < df['Low'].iloc[i-2]:
-            zones.append({'type': 'BEAR', 'top': float(df['Low'].iloc[i-2]), 'bot': float(df['High'].iloc[i])})
+def get_fvg(candles):
+    zones=[]
+    for i in range(2,len(candles)):
+        low_i, high_i = candles[i][3], candles[i][2]
+        low_2, high_2 = candles[i-2][3], candles[i-2][2]
+        if low_i > high_2: zones.append({'type':'BULL','bot':high_2,'top':low_i})
+        if high_i < low_2: zones.append({'type':'BEAR','bot':high_i,'top':low_2})
     return zones[-15:]
 
 for SYMBOL in COINS:
     try:
-        h1 = yf.download(SYMBOL, period="10d", interval="60m", progress=False, auto_adjust=True)
-        h4 = yf.download(SYMBOL, period="1mo", interval="240m", progress=False, auto_adjust=True)
-        if len(h1) < 20 or len(h4) < 20:
-            continue
+        h1 = exchange.fetch_ohlcv(SYMBOL, '1h', limit=100)
+        h4 = exchange.fetch_ohlcv(SYMBOL, '4h', limit=100)
+        price = h1[-1][4]
 
-        price = float(h1['Close'].iloc[-1])
         fvg_h1 = get_fvg(h1)
         fvg_h4 = get_fvg(h4)
 
@@ -44,15 +32,13 @@ for SYMBOL in COINS:
         in_h4 = next((z for z in fvg_h4 if z['bot'] <= price <= z['top']), None)
 
         if in_h1 and in_h4 and in_h1['type'] == in_h4['type']:
-            send_tele(f"🔥 *{SYMBOL} - MASUK FVG H1 + H4*\nType: {in_h1['type']}\nPrice: {price}\nH1: {in_h1['bot']:.4f}-{in_h1['top']:.4f}\nH4: {in_h4['bot']:.4f}-{in_h4['top']:.4f}")
+            send_tele(f"🔥 *{SYMBOL} MASUK FVG H1+H4* {in_h1['type']}\nPrice: {price}")
         elif in_h1:
-            send_tele(f"⚠️ *{SYMBOL} - MASUK FVG H1*\nType: {in_h1['type']}\nPrice: {price}\nZone: {in_h1['bot']:.4f}-{in_h1['top']:.4f}")
-        elif in_h4:
-            send_tele(f"⚠️ *{SYMBOL} - MASUK FVG H4*\nType: {in_h4['type']}\nPrice: {price}\nZone: {in_h4['bot']:.4f}-{in_h4['top']:.4f}")
+            send_tele(f"⚠️ *{SYMBOL} MASUK FVG H1* {in_h1['type']}\nPrice: {price}")
 
-        time.sleep(1)
+        time.sleep(0.3)
     except Exception as e:
-        print(f"{SYMBOL} error {e}")
+        print(f"{SYMBOL} {e}")
         continue
 
-print("done scan 20 coin")
+print("done")
