@@ -1,44 +1,47 @@
-import ccxt, requests, os, time
-
+import ccxt, requests, os, time, json
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
-
 COINS = ["TAO/USDT","CAKE/USDT","ETHFI/USDT","LINK/USDT","JUP/USDT","NEAR/USDT","LDO/USDT","SUI/USDT","INJ/USDT","AVAX/USDT","HYPE/USDT","ZEC/USDT","PENDLE/USDT","ENA/USDT","ADA/USDT","ORDI/USDT","WLD/USDT","HBAR/USDT","TRUMP/USDT","UNI/USDT"]
-
 exchange = ccxt.bitget()
 
+def load_sent():
+    try:
+        with open("sent.json","r") as f: return json.load(f)
+    except: return {}
+def save_sent(d):
+    with open("sent.json","w") as f: json.dump(d,f)
 def send_tele(msg):
     requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": CHAT_ID, "text": msg, "parse_mode":"Markdown"})
-
 def get_fvg(candles):
-    zones=[]
+    z=[]
     for i in range(2,len(candles)):
-        low_i, high_i = candles[i][3], candles[i][2]
-        low_2, high_2 = candles[i-2][3], candles[i-2][2]
-        if low_i > high_2: zones.append({'type':'BULL','bot':high_2,'top':low_i})
-        if high_i < low_2: zones.append({'type':'BEAR','bot':high_i,'top':low_2})
-    return zones[-15:]
+        if candles[i][3] > candles[i-2][2]:
+            z.append((candles[i-2][2], candles[i][3]))
+    return z
 
-for SYMBOL in COINS:
+sent = load_sent()
+now = time.time()
+
+for S in COINS:
     try:
-        h1 = exchange.fetch_ohlcv(SYMBOL, '1h', limit=100)
-        h4 = exchange.fetch_ohlcv(SYMBOL, '4h', limit=100)
-        price = h1[-1][4]
+        o1 = exchange.fetch_ohlcv(S,'1h',limit=100)
+        o4 = exchange.fetch_ohlcv(S,'4h',limit=100)
+        p = o1[-1][4]
 
-        fvg_h1 = get_fvg(h1)
-        fvg_h4 = get_fvg(h4)
+        # CEK H1 SENDIRI
+        if any(bot <= p <= top for bot,top in get_fvg(o1)[-5:]):
+            if now - sent.get(f"{S}_H1",0) > 14400:
+                send_tele(f"🟢 *{S} MASUK FVG BULL H1* Price: {p}")
+                sent[f"{S}_H1"]=now
+                save_sent(sent)
 
-        in_h1 = next((z for z in fvg_h1 if z['bot'] <= price <= z['top']), None)
-        in_h4 = next((z for z in fvg_h4 if z['bot'] <= price <= z['top']), None)
+        # CEK H4 SENDIRI (PISAH)
+        if any(bot <= p <= top for bot,top in get_fvg(o4)[-5:]):
+            if now - sent.get(f"{S}_H4",0) > 14400:
+                send_tele(f"🔵 *{S} MASUK FVG BULL H4* Price: {p}")
+                sent[f"{S}_H4"]=now
+                save_sent(sent)
 
-        if in_h1 and in_h4 and in_h1['type'] == in_h4['type']:
-            send_tele(f"🔥 *{SYMBOL} MASUK FVG H1+H4* {in_h1['type']}\nPrice: {price}")
-        elif in_h1:
-            send_tele(f"⚠️ *{SYMBOL} MASUK FVG H1* {in_h1['type']}\nPrice: {price}")
-
-        time.sleep(0.3)
-    except Exception as e:
-        print(f"{SYMBOL} {e}")
+        time.sleep(0.4)
+    except:
         continue
-
-print("done")
