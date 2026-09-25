@@ -1,4 +1,4 @@
-name: FVG Bot
+name: FVG AUTO
 on:
   schedule:
     - cron: '*/15 * * * *'
