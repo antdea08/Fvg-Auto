@@ -1,18 +1,25 @@
-name: FVG 
+name: FVG H1 H4 Alert
 on:
   schedule:
-    - cron: '*/15 * * * *'
+    - cron: '0 * * * *' # tiap jam
   workflow_dispatch:
+
 jobs:
-  scan:
+  bot:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
+        with: { python-version: '3.10' }
       - run: pip install ccxt requests
       - run: python main.py
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
+      - name: Save entry
+        run: |
+          git config --global user.name "bot"
+          git config --global user.email "bot@bot.com"
+          git add sent.json || true
+          git commit -m "update sent" || true
+          git push || true
