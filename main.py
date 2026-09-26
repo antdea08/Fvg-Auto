@@ -11,7 +11,7 @@ COINS = [
     "ORDI/USDT","WLD/USDT","HBAR/USDT","TRUMP/USDT","UNI/USDT"
 ]
 
-exchange = ccxt.bybit({'enableRateLimit': True})
+exchange = ccxt.bitget({'enableRateLimit': True})
 
 def tele(msg):
     try:
